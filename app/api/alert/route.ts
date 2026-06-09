@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { Tender } from "@/lib/types";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Instantiated at request time to avoid build-time errors when key is missing
+const getResend = () => new Resend(process.env.RESEND_API_KEY ?? "placeholder");
 
 function generateEmailHtml(tenders: Tender[], recipientEmail: string): string {
   const highMatch = tenders.filter((t) => t.compatibilita === "Alta compatibilità");
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       (t) => t.compatibilita === "Alta compatibilità"
     ).length;
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: "Angelini Monitor <noreply@resend.dev>",
       to: [email],
       subject: `🗺️ Ulisse · Bandi & PNRR — ${highCount} ad alta compatibilità — ${new Date().toLocaleDateString("it-IT")}`,
