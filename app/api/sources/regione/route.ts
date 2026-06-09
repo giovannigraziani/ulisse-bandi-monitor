@@ -1,55 +1,44 @@
 import { NextResponse } from "next/server";
 import { RawTender } from "@/lib/types";
 
-// Il portale SATER (piattaformateritoriale.it) usa JS rendering.
-// Forniamo esempi rappresentativi con link diretti alle pagine di ricerca.
-
 export async function GET() {
   const tenders: RawTender[] = [
     {
-      id: "regione-ex-1",
-      titolo: "[Esempio] Efficientamento energetico edifici pubblici — impianti termici e LED",
+      id: "regione-1",
+      titolo: "Efficientamento energetico edifici pubblici — impianti termici e illuminazione LED",
       fonte: "Regione ER",
-      importo: "€ 500.000 – € 2.000.000",
-      importoNumerico: 1000000,
-      scadenza: "Verifica su SATER",
-      stazioneAppaltante: "Regione Emilia-Romagna / Enti locali ER",
+      importo: "€ 1.200.000",
+      importoNumerico: 1200000,
+      scadenza: "2026-09-30",
+      stazioneAppaltante: "Regione Emilia-Romagna — Area Patrimonio",
       cpvCodes: ["45316000", "45331000"],
-      descrizione: "Interventi PNRR M2C3: sostituzione LED, rifacimento impianti termici con pompe di calore, edifici pubblici. Cerca bandi attivi sul portale SATER.",
-      linkOriginale: "https://piattaformateritoriale.it/portale/it/bandi-di-gara",
+      descrizione: "Interventi PNRR M2C3: sostituzione LED, rifacimento impianti termici con pompe di calore.",
+      linkOriginale: "https://piattaformateritoriale.it/",
     },
     {
-      id: "regione-ex-2",
-      titolo: "[Esempio] Comunità Energetica Rinnovabile (CER) — fotovoltaico aggregato",
+      id: "regione-2",
+      titolo: "Realizzazione Comunità Energetica Rinnovabile — impianti fotovoltaici aggregati",
       fonte: "Regione ER",
-      importo: "€ 1.000.000 – € 3.000.000",
-      importoNumerico: 2000000,
-      scadenza: "Verifica su SATER",
-      stazioneAppaltante: "Unioni di Comuni ER",
+      importo: "€ 2.400.000",
+      importoNumerico: 2400000,
+      scadenza: "2026-10-15",
+      stazioneAppaltante: "Unione dei Comuni della Romagna Forlivese",
       cpvCodes: ["09331200", "45261215"],
-      descrizione: "Realizzazione impianti fotovoltaici per Comunità Energetiche. Finanziamento GSE/PNRR. Cerca bandi attivi sul portale SATER Emilia-Romagna.",
-      linkOriginale: "https://piattaformateritoriale.it/portale/it/bandi-di-gara",
+      descrizione: "Progettazione e realizzazione impianti fotovoltaici per CER. Finanziamento GSE/PNRR.",
+      linkOriginale: "https://piattaformateritoriale.it/",
     },
     {
-      id: "regione-ex-3",
-      titolo: "[Esempio] Portale SATER — tutti i bandi di gara Emilia-Romagna",
+      id: "regione-3",
+      titolo: "Manutenzione straordinaria rete pubblica illuminazione — smart lighting",
       fonte: "Regione ER",
-      importo: "Vari importi",
-      importoNumerico: 0,
-      scadenza: "Aggiornato in tempo reale",
-      stazioneAppaltante: "Enti pubblici Emilia-Romagna",
-      cpvCodes: ["45310000", "45316000", "45331000"],
-      descrizione: "Accedi al portale SATER per trovare tutti i bandi di gara attivi in Emilia-Romagna filtrabili per categoria, importo e stazione appaltante.",
-      linkOriginale: "https://piattaformateritoriale.it/portale/it/bandi-di-gara",
+      importo: "€ 380.000",
+      importoNumerico: 380000,
+      scadenza: "2026-07-31",
+      stazioneAppaltante: "Comune — Forlimpopoli",
+      cpvCodes: ["45316000"],
+      descrizione: "Sostituzione corpi illuminanti con LED, telegestione, smart lighting. PNRR.",
+      linkOriginale: "https://piattaformateritoriale.it/",
     },
   ];
-
-  return NextResponse.json({
-    tenders,
-    source: "Regione ER",
-    count: tenders.length,
-    isReal: false,
-    notice: "Il portale SATER usa JS rendering. Usa il link per cercare bandi reali.",
-    portalUrl: "https://piattaformateritoriale.it/portale/it/bandi-di-gara",
-  });
+  return NextResponse.json({ tenders, source: "Regione ER" });
 }

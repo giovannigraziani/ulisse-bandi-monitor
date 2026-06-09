@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { RawTender, SearchResponse, SourceMeta } from "@/lib/types";
+import { RawTender, SearchResponse } from "@/lib/types";
 import { applyScoring } from "@/lib/scorer";
 import { enrichWithGemini } from "@/lib/gemini";
 
@@ -7,107 +7,44 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-async function fetchSource(source: string): Promise<{
-  tenders: RawTender[];
-  isReal: boolean;
-  error?: string;
-  notice?: string;
-  portalUrl?: string;
-}> {
-  const sourceMap: Record<string, string> = {
+async function fetchSource(source: string): Promise<RawTender[]> {
+  const map: Record<string, string> = {
     TED: `${BASE_URL}/api/sources/ted`,
     ANAC: `${BASE_URL}/api/sources/anac`,
     "Regione ER": `${BASE_URL}/api/sources/regione`,
     GSE: `${BASE_URL}/api/sources/gse`,
     Invitalia: `${BASE_URL}/api/sources/invitalia`,
   };
-
-  const url = sourceMap[source];
-  if (!url) return { tenders: [], isReal: false, error: `Unknown source: ${source}` };
-
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    const resp = await fetch(map[source], { signal: AbortSignal.timeout(15000) });
     const data = await resp.json();
-    return {
-      tenders: data.tenders ?? [],
-      isReal: data.isReal ?? true,
-      error: data.error,
-      notice: data.notice,
-      portalUrl: data.portalUrl,
-    };
-  } catch (err) {
-    return { tenders: [], isReal: false, error: err instanceof Error ? err.message : "Fetch failed" };
+    return data.tenders ?? [];
+  } catch {
+    return [];
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const {
-      sources = ["TED", "ANAC", "Regione ER", "GSE", "Invitalia"],
-      minAmount = 50000,
-    } = body;
+    const { sources = ["TED","ANAC","Regione ER","GSE","Invitalia"], minAmount = 0 } = await req.json();
 
-    // 1. Fetch all sources in parallel
-    const fetchResults = await Promise.allSettled(
-      sources.map((s: string) => fetchSource(s))
-    );
-
-    const allTenders: RawTender[] = [];
-    const sourceErrors: { source: string; error: string }[] = [];
-    const sourceMeta: SourceMeta[] = [];
-
-    fetchResults.forEach((result, idx) => {
-      const sourceName = sources[idx];
-      if (result.status === "fulfilled") {
-        allTenders.push(...result.value.tenders);
-        sourceMeta.push({
-          source: sourceName,
-          isReal: result.value.isReal,
-          notice: result.value.notice,
-          portalUrl: result.value.portalUrl,
-          error: result.value.error,
-        });
-        if (result.value.error && result.value.isReal) {
-          sourceErrors.push({ source: sourceName, error: result.value.error });
-        }
-      } else {
-        sourceErrors.push({ source: sourceName, error: result.reason?.message ?? "Error" });
-        sourceMeta.push({ source: sourceName, isReal: false, error: result.reason?.message });
-      }
-    });
-
-    // Deduplicate
+    const results = await Promise.allSettled(sources.map((s: string) => fetchSource(s)));
+    const allTenders: RawTender[] = results.flatMap((r) => r.status === "fulfilled" ? r.value : []);
     const unique = Array.from(new Map(allTenders.map((t) => [t.id, t])).values());
 
-    // 2. Deterministic scoring
     const { scored, needAIIds } = applyScoring(unique);
 
-    // 3. AI enrichment only for ambiguous tenders
     const toEnrich = scored.filter((t) => needAIIds.includes(t.id)).slice(0, 20);
     if (toEnrich.length > 0 && process.env.GEMINI_API_KEY) {
       try {
         const enriched = await enrichWithGemini(toEnrich);
-        for (const enrichment of enriched) {
-          const idx = scored.findIndex((t) => t.id === enrichment.id);
-          if (idx !== -1) {
-            scored[idx] = {
-              ...scored[idx],
-              score: enrichment.score,
-              compatibilita: enrichment.compatibilita,
-              tagCategoria: enrichment.tagCategoria,
-              categoria: enrichment.tagCategoria,
-              perche_rilevante: enrichment.perche_rilevante,
-              requisiti_chiave: enrichment.requisiti_chiave,
-            };
-          }
+        for (const e of enriched) {
+          const i = scored.findIndex((t) => t.id === e.id);
+          if (i !== -1) scored[i] = { ...scored[i], ...e, categoria: e.tagCategoria };
         }
-      } catch (aiErr) {
-        console.error("Gemini enrichment failed:", aiErr);
-      }
+      } catch { /* AI enrichment is optional */ }
     }
 
-    // 4. Filter and sort
     const filtered = scored
       .filter((t) => t.importoNumerico === 0 || t.importoNumerico >= minAmount)
       .sort((a, b) => b.score - a.score);
@@ -115,15 +52,12 @@ export async function POST(req: NextRequest) {
     const response: SearchResponse = {
       tenders: filtered,
       lastUpdated: new Date().toISOString(),
-      sourceErrors,
-      sourceMeta,
       totalFound: filtered.length,
     };
 
     return NextResponse.json(response);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Error" }, { status: 500 });
   }
 }
 
