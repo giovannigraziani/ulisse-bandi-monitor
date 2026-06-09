@@ -52,9 +52,9 @@ function generateEmailHtml(tenders: Tender[], recipientEmail: string): string {
   <div style="max-width: 900px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
 
     <!-- Header -->
-    <div style="background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 100%); padding: 32px; color: white;">
-      <h1 style="margin: 0 0 8px; font-size: 24px;">🏗️ Report Bandi & PNRR</h1>
-      <p style="margin: 0; opacity: 0.9;">Gruppo Angelini S.r.l. — ${date}</p>
+    <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 32px; color: white;">
+      <h1 style="margin: 0 0 8px; font-size: 24px;">🗺️ Ulisse — Report Bandi & PNRR</h1>
+      <p style="margin: 0; opacity: 0.9;">Monitor bandi pubblici · ${date}</p>
     </div>
 
     <!-- Stats -->
@@ -95,7 +95,7 @@ function generateEmailHtml(tenders: Tender[], recipientEmail: string): string {
     <!-- Footer -->
     <div style="padding: 20px 24px; background: #f8fafc; border-top: 1px solid #e5e7eb; text-align: center;">
       <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-        Report generato automaticamente da Angelini Bandi Monitor.<br>
+        Report generato da Ulisse · Monitor bandi pubblici e PNRR.<br>
         Inviato a ${recipientEmail} · ${new Date().toLocaleString("it-IT")}
       </p>
     </div>
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await resend.emails.send({
       from: "Angelini Monitor <noreply@resend.dev>",
       to: [email],
-      subject: `🏗️ Bandi & PNRR — ${highCount} ad alta compatibilità — ${new Date().toLocaleDateString("it-IT")}`,
+      subject: `🗺️ Ulisse · Bandi & PNRR — ${highCount} ad alta compatibilità — ${new Date().toLocaleDateString("it-IT")}`,
       html,
     });
 

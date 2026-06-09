@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Angelini Bandi Monitor — Bandi & PNRR",
-  description: "Monitoraggio automatico bandi pubblici e PNRR per Gruppo Angelini S.r.l. — impiantistica civile e industriale, Forlimpopoli FC",
+  title: "Ulisse — Monitor Bandi & PNRR",
+  description: "Monitoraggio automatico di bandi pubblici e PNRR da TED Europa, ANAC, Regione ER, GSE e Invitalia. Analisi AI per compatibilità aziendale.",
 };
 
 export default function RootLayout({
