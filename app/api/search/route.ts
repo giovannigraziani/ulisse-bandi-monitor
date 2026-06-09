@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RawTender, SearchResponse } from "@/lib/types";
 import { applyScoring } from "@/lib/scorer";
-import { enrichWithGemini } from "@/lib/gemini";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ??
@@ -32,18 +31,7 @@ export async function POST(req: NextRequest) {
     const allTenders: RawTender[] = results.flatMap((r) => r.status === "fulfilled" ? r.value : []);
     const unique = Array.from(new Map(allTenders.map((t) => [t.id, t])).values());
 
-    const { scored, needAIIds } = applyScoring(unique);
-
-    const toEnrich = scored.filter((t) => needAIIds.includes(t.id)).slice(0, 20);
-    if (toEnrich.length > 0 && process.env.GEMINI_API_KEY) {
-      try {
-        const enriched = await enrichWithGemini(toEnrich);
-        for (const e of enriched) {
-          const i = scored.findIndex((t) => t.id === e.id);
-          if (i !== -1) scored[i] = { ...scored[i], ...e, categoria: e.tagCategoria };
-        }
-      } catch { /* AI enrichment is optional */ }
-    }
+    const { scored } = applyScoring(unique);
 
     const filtered = scored
       .filter((t) => t.importoNumerico === 0 || t.importoNumerico >= minAmount)
