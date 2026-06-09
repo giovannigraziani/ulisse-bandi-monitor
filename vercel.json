@@ -1,0 +1,22 @@
+{
+  "functions": {
+    "app/api/search/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/sources/ted/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/sources/anac/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/sources/regione/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/sources/gse/route.ts": {
+      "maxDuration": 15
+    },
+    "app/api/sources/invitalia/route.ts": {
+      "maxDuration": 15
+    }
+  }
+}
