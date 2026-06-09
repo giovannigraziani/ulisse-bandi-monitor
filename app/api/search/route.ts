@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { RawTender, SearchResponse } from "@/lib/types";
+import { RawTender, SearchResponse, SourceMeta } from "@/lib/types";
 import { applyScoring } from "@/lib/scorer";
 import { enrichWithGemini } from "@/lib/gemini";
 
@@ -7,7 +7,13 @@ const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-async function fetchSource(source: string): Promise<{ tenders: RawTender[]; error?: string }> {
+async function fetchSource(source: string): Promise<{
+  tenders: RawTender[];
+  isReal: boolean;
+  error?: string;
+  notice?: string;
+  portalUrl?: string;
+}> {
   const sourceMap: Record<string, string> = {
     TED: `${BASE_URL}/api/sources/ted`,
     ANAC: `${BASE_URL}/api/sources/anac`,
@@ -17,14 +23,20 @@ async function fetchSource(source: string): Promise<{ tenders: RawTender[]; erro
   };
 
   const url = sourceMap[source];
-  if (!url) return { tenders: [], error: `Unknown source: ${source}` };
+  if (!url) return { tenders: [], isReal: false, error: `Unknown source: ${source}` };
 
   try {
     const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
     const data = await resp.json();
-    return { tenders: data.tenders ?? [], error: data.error };
+    return {
+      tenders: data.tenders ?? [],
+      isReal: data.isReal ?? true,
+      error: data.error,
+      notice: data.notice,
+      portalUrl: data.portalUrl,
+    };
   } catch (err) {
-    return { tenders: [], error: err instanceof Error ? err.message : "Fetch failed" };
+    return { tenders: [], isReal: false, error: err instanceof Error ? err.message : "Fetch failed" };
   }
 }
 
@@ -43,31 +55,36 @@ export async function POST(req: NextRequest) {
 
     const allTenders: RawTender[] = [];
     const sourceErrors: { source: string; error: string }[] = [];
+    const sourceMeta: SourceMeta[] = [];
 
     fetchResults.forEach((result, idx) => {
       const sourceName = sources[idx];
       if (result.status === "fulfilled") {
         allTenders.push(...result.value.tenders);
-        if (result.value.error) {
+        sourceMeta.push({
+          source: sourceName,
+          isReal: result.value.isReal,
+          notice: result.value.notice,
+          portalUrl: result.value.portalUrl,
+          error: result.value.error,
+        });
+        if (result.value.error && result.value.isReal) {
           sourceErrors.push({ source: sourceName, error: result.value.error });
         }
       } else {
         sourceErrors.push({ source: sourceName, error: result.reason?.message ?? "Error" });
+        sourceMeta.push({ source: sourceName, isReal: false, error: result.reason?.message });
       }
     });
 
     // Deduplicate
     const unique = Array.from(new Map(allTenders.map((t) => [t.id, t])).values());
 
-    // 2. Deterministic scoring (zero AI cost)
+    // 2. Deterministic scoring
     const { scored, needAIIds } = applyScoring(unique);
 
-    // 3. AI enrichment ONLY for ambiguous tenders (no CPV, low score)
-    //    Capped at 20 to stay well within Gemini free tier
-    const toEnrich = scored
-      .filter((t) => needAIIds.includes(t.id))
-      .slice(0, 20);
-
+    // 3. AI enrichment only for ambiguous tenders
+    const toEnrich = scored.filter((t) => needAIIds.includes(t.id)).slice(0, 20);
     if (toEnrich.length > 0 && process.env.GEMINI_API_KEY) {
       try {
         const enriched = await enrichWithGemini(toEnrich);
@@ -86,16 +103,11 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (aiErr) {
-        // AI enrichment is optional — don't fail the whole request
         console.error("Gemini enrichment failed:", aiErr);
-        sourceErrors.push({
-          source: "Gemini AI",
-          error: aiErr instanceof Error ? aiErr.message : "AI error",
-        });
       }
     }
 
-    // 4. Filter by minimum amount and sort by score
+    // 4. Filter and sort
     const filtered = scored
       .filter((t) => t.importoNumerico === 0 || t.importoNumerico >= minAmount)
       .sort((a, b) => b.score - a.score);
@@ -104,6 +116,7 @@ export async function POST(req: NextRequest) {
       tenders: filtered,
       lastUpdated: new Date().toISOString(),
       sourceErrors,
+      sourceMeta,
       totalFound: filtered.length,
     };
 
@@ -115,8 +128,5 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({
-    message: "Angelini Bandi Monitor API",
-    scoring: "Deterministic (CPV+NUTS+keyword rules) + Gemini Flash only for ambiguous tenders",
-  });
+  return NextResponse.json({ message: "Ulisse API — POST /api/search" });
 }

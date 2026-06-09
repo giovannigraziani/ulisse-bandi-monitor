@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Tender, SearchResponse } from "@/lib/types";
+import { Tender, SearchResponse, SourceMeta } from "@/lib/types";
 import SearchPanel from "./SearchPanel";
 import ResultCard from "./ResultCard";
 import StatsBar from "./StatsBar";
@@ -9,23 +9,22 @@ import AlertForm from "./AlertForm";
 
 type FilterMode = "all" | "high" | "high+medium";
 type SortMode = "score" | "scadenza" | "importo";
-type CategoryFilter = "all" | string;
 
 export default function Dashboard() {
   const [tenders, setTenders] = useState<Tender[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [sourceMeta, setSourceMeta] = useState<SourceMeta[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sourceErrors, setSourceErrors] = useState<{ source: string; error: string }[]>([]);
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [sortMode, setSortMode] = useState<SortMode>("score");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const handleSearch = useCallback(
     async (config: { sources: string[]; minAmount: number; filter: string }) => {
       setIsLoading(true);
       setError(null);
-      setSourceErrors([]);
+      setSourceMeta([]);
       setFilterMode(config.filter as FilterMode);
 
       try {
@@ -43,7 +42,7 @@ export default function Dashboard() {
         const data: SearchResponse = await resp.json();
         setTenders(data.tenders);
         setLastUpdated(data.lastUpdated);
-        setSourceErrors(data.sourceErrors ?? []);
+        setSourceMeta(data.sourceMeta ?? []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Errore sconosciuto");
       } finally {
@@ -72,7 +71,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-gradient-to-r from-slate-900 to-slate-700 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -109,15 +107,13 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!error && sourceErrors.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-4 py-3 mb-6 text-sm">
-            <strong>Avviso:</strong> Alcune fonti non hanno risposto:{" "}
-            {sourceErrors.map((se) => se.source).join(", ")}. I risultati disponibili sono mostrati.
-          </div>
-        )}
-
         {(tenders.length > 0 || isLoading) && (
-          <StatsBar tenders={tenders} lastUpdated={lastUpdated} isLoading={isLoading} />
+          <StatsBar
+            tenders={tenders}
+            lastUpdated={lastUpdated}
+            isLoading={isLoading}
+            sourceMeta={sourceMeta}
+          />
         )}
 
         {tenders.length > 0 && (
@@ -172,14 +168,17 @@ export default function Dashboard() {
             <p className="text-sm mt-1">Configura le fonti e avvia la ricerca</p>
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
               {[
-                { icon: "🇪🇺", title: "TED Europa", desc: "Appalti pubblici UE sopra soglia. API gratuita." },
-                { icon: "🇮🇹", title: "ANAC & Regione ER", desc: "Bandi nazionali e regionali italiani." },
-                { icon: "☀️", title: "GSE & Invitalia", desc: "Incentivi PNRR, fotovoltaico, CER." },
+                { icon: "🇪🇺", title: "TED Europa", desc: "Appalti pubblici UE · dati reali via API.", badge: "live" },
+                { icon: "🇮🇹", title: "ANAC / Regione ER", desc: "Portali con JS rendering — link diretti al portale.", badge: "link" },
+                { icon: "☀️", title: "GSE / Invitalia", desc: "Incentivi PNRR, fotovoltaico, CER.", badge: "link" },
               ].map((item) => (
                 <div key={item.title} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
                   <div className="text-3xl mb-2">{item.icon}</div>
                   <div className="font-semibold text-gray-700 mb-1 text-sm">{item.title}</div>
-                  <div className="text-xs text-gray-500">{item.desc}</div>
+                  <div className="text-xs text-gray-500 mb-2">{item.desc}</div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${item.badge === "live" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                    {item.badge === "live" ? "● Dati reali" : "◎ Link portale"}
+                  </span>
                 </div>
               ))}
             </div>
@@ -187,18 +186,13 @@ export default function Dashboard() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <p>Nessun bando corrisponde ai filtri selezionati.</p>
-            <button
-              onClick={() => { setFilterMode("all"); setCategoryFilter("all"); }}
-              className="text-slate-600 text-sm mt-2 hover:underline"
-            >
+            <button onClick={() => { setFilterMode("all"); setCategoryFilter("all"); }} className="text-slate-600 text-sm mt-2 hover:underline">
               Rimuovi filtri
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-            {filtered.map((tender) => (
-              <ResultCard key={tender.id} tender={tender} />
-            ))}
+            {filtered.map((tender) => <ResultCard key={tender.id} tender={tender} />)}
           </div>
         )}
 
@@ -206,7 +200,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="text-center py-6 text-xs text-gray-400 border-t border-gray-200 mt-8">
-        Ulisse · Monitor bandi pubblici e PNRR · Dati da TED Europa, ANAC, Regione ER, GSE, Invitalia
+        Ulisse · Monitor bandi pubblici e PNRR · TED Europa (live) + ANAC, GSE, Invitalia, Regione ER (link portale)
       </footer>
     </div>
   );

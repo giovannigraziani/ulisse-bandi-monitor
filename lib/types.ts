@@ -40,10 +40,19 @@ export interface SearchConfig {
   sources: string[];
 }
 
+export interface SourceMeta {
+  source: string;
+  isReal: boolean;
+  error?: string;
+  notice?: string;
+  portalUrl?: string;
+}
+
 export interface SearchResponse {
   tenders: Tender[];
   lastUpdated: string;
   sourceErrors: { source: string; error: string }[];
+  sourceMeta: SourceMeta[];
   totalFound: number;
 }
 

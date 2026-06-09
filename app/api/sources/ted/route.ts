@@ -4,135 +4,89 @@ import { CPV_CODES } from "@/lib/companyProfile";
 
 interface TEDNotice {
   "publication-number"?: string;
-  "notice-title"?: Record<string, string> | string;
-  "short-description"?: Record<string, string> | string;
+  "notice-title"?: Record<string, string>;
+  "short-description"?: Record<string, string>;
   "total-value"?: number;
   "deadline-date-lot"?: string;
   "deadline"?: string;
   "organisation-name-buyer"?: string[];
   "classification-cpv"?: string[];
-  "document-url-lot"?: string;
-  "publication-date"?: string;
   links?: {
     html?: Record<string, string>;
-    pdf?: Record<string, string>;
+    htmlDirect?: Record<string, string>;
   };
 }
 
-function extractTitle(field: Record<string, string> | string | undefined): string {
+function extractItalian(field: Record<string, string> | undefined): string {
   if (!field) return "";
-  if (typeof field === "string") return field;
-  return field["ITA"] ?? field["ENG"] ?? field["FRA"] ?? Object.values(field)[0] ?? "";
+  return field["ita"] ?? field["ITA"] ?? field["eng"] ?? field["ENG"] ?? Object.values(field)[0] ?? "";
 }
 
-function buildNoticeUrl(notice: TEDNotice): string {
-  const pubNum = notice["publication-number"];
-  if (notice.links?.html) {
-    return notice.links.html["ITA"] ?? notice.links.html["ENG"] ?? Object.values(notice.links.html)[0] ?? "";
-  }
-  if (pubNum) {
-    return `https://ted.europa.eu/en/notice/${pubNum}`;
-  }
-  return "https://ted.europa.eu/";
+function buildUrl(notice: TEDNotice): string {
+  const html = notice.links?.html;
+  if (html) return html["ITA"] ?? html["ita"] ?? html["ENG"] ?? html["eng"] ?? Object.values(html)[0];
+  const pub = notice["publication-number"];
+  return pub ? `https://ted.europa.eu/it/notice/-/detail/${pub}` : "https://ted.europa.eu/";
 }
 
 export async function GET() {
   try {
-    // TED v3 requires POST with JSON body
+    // Build OR query across all CPV codes, filtered to Italy
     const cpvQuery = CPV_CODES.map((c) => `classification-cpv=${c}`).join(" OR ");
-    const query = `(${cpvQuery}) AND publication-country=IT`;
+    const query = `(${cpvQuery}) AND organisation-country-buyer=ITA`;
 
     const response = await fetch("https://api.ted.europa.eu/v3/notices/search", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         query,
         scope: "ACTIVE",
         fields: [
           "notice-identifier",
           "notice-title",
+          "short-description",
           "total-value",
           "deadline-date-lot",
           "deadline",
           "organisation-name-buyer",
           "classification-cpv",
-          "document-url-lot",
-          "publication-date",
           "links",
-          "short-description",
+          "publication-date",
         ],
-        "sort-field": "publication-date",
-        "sort-order": "DESC",
-        "page-size": 50,
       }),
     });
 
-    // If page-size is rejected try without it
-    let data: { notices?: TEDNotice[] };
-    if (response.ok) {
-      data = await response.json();
-    } else {
-      // Retry without page-size
-      const retry = await fetch("https://api.ted.europa.eu/v3/notices/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          query,
-          scope: "ACTIVE",
-          fields: [
-            "notice-identifier",
-            "notice-title",
-            "total-value",
-            "deadline-date-lot",
-            "deadline",
-            "organisation-name-buyer",
-            "classification-cpv",
-            "document-url-lot",
-            "publication-date",
-            "links",
-          ],
-        }),
-      });
-      if (!retry.ok) {
-        const err = await retry.text();
-        throw new Error(`TED API: ${err.substring(0, 200)}`);
-      }
-      data = await retry.json();
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`TED API ${response.status}: ${err.substring(0, 200)}`);
     }
 
-    const notices: TEDNotice[] = data.notices ?? [];
+    const data: { notices?: TEDNotice[] } = await response.json();
+    const notices = data.notices ?? [];
 
     const tenders: RawTender[] = notices.map((notice, idx) => {
       const pubNum = notice["publication-number"] ?? `ted-${idx}`;
-      const title = extractTitle(notice["notice-title"]) || "Bando TED";
-      const desc = extractTitle(notice["short-description"]) || title;
       const amount = notice["total-value"] ?? 0;
-      const scadenza = notice["deadline-date-lot"] ?? notice["deadline"] ?? "N/D";
-      const buyer = notice["organisation-name-buyer"];
-      const stazioneAppaltante = Array.isArray(buyer) ? buyer[0] : buyer ?? "N/D";
       const cpvCodes = notice["classification-cpv"] ?? [];
-      const link = buildNoticeUrl(notice);
+      const buyer = notice["organisation-name-buyer"];
 
       return {
         id: `ted-${pubNum}`,
-        titolo: title,
+        titolo: extractItalian(notice["notice-title"]) || "Bando TED",
         fonte: "TED" as const,
         importo: amount > 0 ? `€ ${amount.toLocaleString("it-IT")}` : "N/D",
         importoNumerico: amount,
-        scadenza,
-        stazioneAppaltante,
+        scadenza: notice["deadline-date-lot"] ?? notice["deadline"] ?? "N/D",
+        stazioneAppaltante: Array.isArray(buyer) ? (buyer[0] ?? "N/D") : (buyer ?? "N/D"),
         cpvCodes,
-        descrizione: desc,
-        linkOriginale: link,
+        descrizione: extractItalian(notice["short-description"]) || extractItalian(notice["notice-title"]) || "",
+        linkOriginale: buildUrl(notice),
       };
     });
 
-    return NextResponse.json({ tenders, source: "TED", count: tenders.length });
+    return NextResponse.json({ tenders, source: "TED", count: tenders.length, isReal: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: msg, tenders: [], source: "TED" }, { status: 500 });
+    return NextResponse.json({ error: msg, tenders: [], source: "TED", isReal: false }, { status: 500 });
   }
 }
